@@ -1,32 +1,48 @@
 #!/bin/bash
 
-#A pipeline to check the two genome assembled by different methods - Jitendra
+# A pipeline to check the genome assembled by different methods
+# Jitendra Narayan
 
-#General location settings for checker
-scriptLoc=/home/jitendra/ETC/TESTing/checkerG/scriptBase
-rGenome=/home/jitendra/ETC/TESTing/checkerG/contigs.fa
-tGenome=/home/jitendra/ETC/TESTing/checkerG/cleanMIRA_100.fa
-genomeFileName=contigs.fa
-config=/home/jitendra/ETC/TESTing/checkerG/lastZconfig
+# GENERAL location settings for checker
+scriptLoc=/home/urbe/Tools/MyTools/checkerG/scriptBase
+rGenome=/home/urbe/Tools/MyTools/checkerG/Contig_0_1_10.fa
+tGenome=/home/urbe/Tools/MyTools/checkerG/MergedContigs.fasta
+genomeFileName=Contig_0_1_10.fa
 
-#Today is
-Now_hourly=$(date +%d-%b-%H_%M)    
-Now_daily=$(date +%d-%b-daily)    
+config=/home/urbe/Tools/MyTools/checkerG/lastZconfig
+R1=/media/urbe/MyDDrive/OriginalReads/ANature/GC027568.151120_Adineta_Nature_and_Habrotrocha.160226.HiSeq2000.FCB.lane1.gcap_dev.R1.fastq
+R2=/media/urbe/MyDDrive/OriginalReads/ANature/GC027568.151120_Adineta_Nature_and_Habrotrocha.160226.HiSeq2000.FCB.lane1.gcap_dev.R2.fastq
+$readType=small;
+$longR=
+
+# General thresholds and folders
+DIR=OutData
+
+#=========================================================================================================================================
+
+# DATE today
+Now_hourly=$(date +%d-%b-%H_%M)
+Now_daily=$(date +%d-%b-daily)
 echo "$Now_hourly"
 echo "$Now_daily"
 
-#General thresholds and folders
-DIR=OutData
+# Clean up the fasta header
+awk '{print $1}' $rGenome > rGenome.fa
 
-#/home/urbe/Tools/Alienomics_v1.1/Adineta_vaga_v2.0.scaffolds.fa
-
-if [ -d "$DIR" ]; then
-    printf '%s\n' "Removing Directory ($DIR)"
-    rm -rf "$DIR"
+# CHECK directory
+read -p "Are you sure you want to delete the folder -- continue? <y/N> " prompt
+if [[ $prompt == "y" || $prompt == "Y" || $prompt == "yes" || $prompt == "Yes" ]] && [[ -d "$DIR" ]]
+then
+  printf '%s\n' "Removing Directory ($DIR)"
+  rm -rf "$DIR"
+else
+  exit 0
 fi
 
+# Create DIR
 mkdir $DIR; cd $DIR
 
+# LastZ alignment
 echo "Align to genome"
 perl $scriptLoc/parallelLastZ.pl -q $rGenome -t $tGenome -c $config -s 4 -l 1000
 
@@ -44,7 +60,7 @@ do
 
 done
 
-#find . -name "*.lz" -size 0 -delete
+# find . -name "*.lz" -size 0 -delete
 
 cat *.bed > allALN.bed
 cp allALN.bed ..
@@ -52,15 +68,19 @@ cp allALN.bed ..
 echo "Come out of the dir"
 cd ..
 
+#General for simple reformatting ... strand for merge 
 echo "Merge overlapping blocks of interest +/-"
 perl $scriptLoc/mergeOverlaps.pl allALN.bed general > finalALN.bed
 
 echo "Create the faidx"
 samtools faidx $rGenome
 
-#Size of the genome - using fai file of samtools
-perl -e '$total = 0; while(<>){chomp();($id, $length) = split(/\t/); $total += $length;}; printf "$total\n"' $rGenome.fai
+# Size of the genome - using fai file of samtools
+#perl -e '$total = 0; while(<>){chomp();($id, $length) = split(/\t/); $total += $length;}; printf "$total\n"' $rGenome.fai
+# Return the genome size in a variable.
 
+echo "Checking the genome size"
+genomesize=$(perl -e '$total = 0; while(<>){chomp();($id, $length) = split(/\t/); $total += $length;}; printf "$total\n"' $rGenome.fai)
 
 echo "extract all breaks location"
 perl $scriptLoc/findBRK.pl finalALN.bed final_breakspoints.txt $rGenome.fai 1
@@ -73,30 +93,55 @@ rm -rf *.tmp *.html *.mask *.txt.parse *.dat.parse *.dat
 echo "Remove the small contigs"
 perl $scriptLoc/removeSmall.pl 1000 $rGenome > newGenome.fa
 
+# MAPPING reads
+#----------------------------------------------------------------------------------------------
 echo "Map the contigs"
 bwa index newGenome.fa
-#bwa mem -x pacbio newGenome.fa pacbio.fq > aln.sam
+
+if [ "$readType" == "long" ]
+then
+  echo "You have long Pacbio reads"
+  bwa mem -x pacbio newGenome.fa $longR > aln.sam
+else
+  echo "You have small PE reads"
+  bwa mem -M -t 16 newGenome.fa $R1 $R2 > aln.sam
+fi
 
 echo "Sam to Bam conversion"
 samtools view -Sb  aln.sam  >  aln.bam
+#-----------------------------------------------------------------------------------------------
+
+# Sort the BAM file
+echo "Sort the BAM file"
+samtools sort -T /tmp/aln.sorted -o aln.sorted.bam aln.bam
 
 #just the total number of "mapped reads" divided by the "size of the reference genome" for average coverage
-echo "looking for global coverage"
-samtools view -c -F 4 sorted.bam.bam
+echo "Looking for global coverage"
+allMappedReads=$(samtools view -c -F 4 aln.sorted.bam)
 
-#If the bam files are indexed the fastest way to get the number of mapped reads on each chromosome is:
+#Average coverage
+avarageCoverage=$($allMappedReads/$genomesize);
+
+echo "Avarage coverage = $averageCoverage";
+
+# If the bam files are indexed the fastest way to get the number of mapped reads on each chromosome is:
 #samtools index myfile.bam
 #samtools idxstats myfile.bam
 
-#Create genomecov file
+# Create genomecov file
 echo "checking for genome coverage"
 bedtools genomecov -ibam aln.bam -bga -split > allCoverage.bed
 
-#Look into depth
+# AbnormalCoverage.bed contain the regions with coverage >= averageCoverage X 2
+# Extract all the region with "Abnormally high coverage" ... i.e coverage >= averageCoverage X 2
+perl $scriptLoc/extractAbnormalCoverage.pl allCoverage.bed $avarageCoverage > AbnoralCoverageRegion.bed
+
+# Look into depth
 #samtools depth $bamFile  |  awk '{sum+=$3; sumsq+=$3*$3} END { print "Average = ",sum/NR; print "Stdev = ",sqrt(sumsq/NR - (sum/NR)**2)}'
 
-#Create final GFF result file for visualization
+# Create final GFF result file for visualization
 echo "Creating final GFF file in detail"
 perl $scriptLoc/createFinalGFF.pl final_breakspoints.txt $genomeFileName.2.7.7.80.10.50.500.final.parse allCoverage.bed 1000 newGenome.fa > final.gff
 
+echo "All Done\n";
 
