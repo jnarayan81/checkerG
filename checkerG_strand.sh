@@ -9,6 +9,12 @@ tGenome=/home/jitendra/ETC/TESTing/checkerG/cleanMIRA_100.fa
 genomeFileName=contigs.fa
 config=/home/jitendra/ETC/TESTing/checkerG/lastZconfig
 
+#Today is
+Now_hourly=$(date +%d-%b-%H_%M)    
+Now_daily=$(date +%d-%b-daily)    
+echo "$Now_hourly"
+echo "$Now_daily"
+
 #General thresholds and folders
 DIR=OutData
 
@@ -52,6 +58,10 @@ perl $scriptLoc/mergeOverlaps.pl allALN.bed general > finalALN.bed
 echo "Create the faidx"
 samtools faidx $rGenome
 
+#Size of the genome - using fai file of samtools
+perl -e '$total = 0; while(<>){chomp();($id, $length) = split(/\t/); $total += $length;}; printf "$total\n"' $rGenome.fai
+
+
 echo "extract all breaks location"
 perl $scriptLoc/findBRK.pl finalALN.bed final_breakspoints.txt $rGenome.fai 1
 
@@ -63,8 +73,6 @@ rm -rf *.tmp *.html *.mask *.txt.parse *.dat.parse *.dat
 echo "Remove the small contigs"
 perl $scriptLoc/removeSmall.pl 1000 $rGenome > newGenome.fa
 
-exit;
-
 echo "Map the contigs"
 bwa index newGenome.fa
 #bwa mem -x pacbio newGenome.fa pacbio.fq > aln.sam
@@ -72,9 +80,17 @@ bwa index newGenome.fa
 echo "Sam to Bam conversion"
 samtools view -Sb  aln.sam  >  aln.bam
 
+#just the total number of "mapped reads" divided by the "size of the reference genome" for average coverage
+echo "looking for global coverage"
+samtools view -c -F 4 sorted.bam.bam
+
+#If the bam files are indexed the fastest way to get the number of mapped reads on each chromosome is:
+#samtools index myfile.bam
+#samtools idxstats myfile.bam
+
 #Create genomecov file
 echo "checking for genome coverage"
-bedtools genomecov -ibam aln.bam -bga > allCoverage.bed
+bedtools genomecov -ibam aln.bam -bga -split > allCoverage.bed
 
 #Look into depth
 #samtools depth $bamFile  |  awk '{sum+=$3; sumsq+=$3*$3} END { print "Average = ",sum/NR; print "Stdev = ",sqrt(sumsq/NR - (sum/NR)**2)}'
