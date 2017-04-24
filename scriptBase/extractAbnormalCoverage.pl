@@ -13,4 +13,5 @@ while (my $row = <$fh>) {
   if ($data[3] >= ($averageCov * 2)) {
 	print "$row\n";
 }
+}
 close $fh;

@@ -12,7 +12,8 @@ my $minlen = shift or die "Error: `minlen` parameter not provided\n";
         my @chunk = split /\n/;
         my $header = shift @chunk;
         my $seqlen = length join "", @chunk;
-        print ">$_" if($seqlen >= $minlen);
+	my $seq=lc($_);
+        print ">$seq" if($seqlen >= $minlen);
     }
     local $/="\n";
 }
