@@ -14,6 +14,7 @@ R1=/media/urbe/MyDDrive/OriginalReads/ANature/GC027568.151120_Adineta_Nature_and
 R2=/media/urbe/MyDDrive/OriginalReads/ANature/GC027568.151120_Adineta_Nature_and_Habrotrocha.160226.HiSeq2000.FCB.lane1.gcap_dev.R2.fastq
 $readType=small;
 $longR=
+readLen=251
 
 # General thresholds and folders
 DIR=OutData
@@ -90,8 +91,8 @@ $scriptLoc/trf/trf409.linux64 $rGenome 2 7 7 80 10 50 500 -f -d -m
 perl $scriptLoc/trf/trfparser_v1.pl $genomeFileName.2.7.7.80.10.50.500.dat 1
 rm -rf *.tmp *.html *.mask *.txt.parse *.dat.parse *.dat
 
-echo "Remove the small contigs"
-perl $scriptLoc/removeSmall.pl 1000 $rGenome > newGenome.fa
+echo "Remove the small contigs" # Put the number here
+perl $scriptLoc/removeSmall.pl 0 $rGenome > newGenome.fa
 
 # MAPPING reads
 #----------------------------------------------------------------------------------------------
@@ -120,7 +121,8 @@ echo "Looking for global coverage"
 allMappedReads=$(samtools view -c -F 4 aln.sorted.bam)
 
 #Average coverage
-avarageCoverage=$($allMappedReads/$genomesize);
+#number of reads * read length / target size
+avarageCoverage=$($allMappedReads * $readLen/$genomesize);
 
 echo "Avarage coverage = $averageCoverage";
 
@@ -130,7 +132,7 @@ echo "Avarage coverage = $averageCoverage";
 
 # Create genomecov file
 echo "checking for genome coverage"
-bedtools genomecov -ibam aln.bam -bga -split > allCoverage.bed
+bedtools genomecov -ibam aln.sorted.bam -bga -split > allCoverage.bed
 
 # AbnormalCoverage.bed contain the regions with coverage >= averageCoverage X 2
 # Extract all the region with "Abnormally high coverage" ... i.e coverage >= averageCoverage X 2
@@ -141,7 +143,7 @@ perl $scriptLoc/extractAbnormalCoverage.pl allCoverage.bed $avarageCoverage > Ab
 
 # Create final GFF result file for visualization
 echo "Creating final GFF file in detail"
-perl $scriptLoc/createFinalGFF.pl final_breakspoints.txt $genomeFileName.2.7.7.80.10.50.500.final.parse allCoverage.bed 1000 newGenome.fa > final.gff
+perl $scriptLoc/createFinalGFF.pl final_breakspoints.txt $genomeFileName.2.7.7.80.10.50.500.final.parse allCoverage.bed 1000 newGenome.fa avarageCoverage > final.gff
 
 echo "All Done\n";
 
