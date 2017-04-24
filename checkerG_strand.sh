@@ -12,7 +12,7 @@ genomeFileName=Contig_0_1_10.fa
 config=/home/urbe/Tools/MyTools/checkerG/lastZconfig
 R1=/media/urbe/MyDDrive/OriginalReads/ANature/GC027568.151120_Adineta_Nature_and_Habrotrocha.160226.HiSeq2000.FCB.lane1.gcap_dev.R1.fastq
 R2=/media/urbe/MyDDrive/OriginalReads/ANature/GC027568.151120_Adineta_Nature_and_Habrotrocha.160226.HiSeq2000.FCB.lane1.gcap_dev.R2.fastq
-$readType=small;
+$readType=small
 $longR=
 readLen=251
 
@@ -31,6 +31,7 @@ echo "$Now_daily"
 awk '{print $1}' $rGenome > rGenome.fa
 
 # CHECK directory
+if [ -d "$DIR" ]; then
 read -p "Are you sure you want to delete the folder -- continue? <y/N> " prompt
 if [[ $prompt == "y" || $prompt == "Y" || $prompt == "yes" || $prompt == "Yes" ]] && [[ -d "$DIR" ]]
 then
@@ -38,6 +39,7 @@ then
   rm -rf "$DIR"
 else
   exit 0
+fi
 fi
 
 # Create DIR
